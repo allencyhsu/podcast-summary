@@ -1,0 +1,82 @@
+import os
+import time
+start_time = time.time()
+
+from faster_whisper import WhisperModel
+
+model_size = "large-v2"
+# model_size = "deepdml/faster-whisper-large-v3-turbo-ct2"
+model = WhisperModel(model_size, device="cuda", device_index=1, compute_type="float16")
+# model = WhisperModel(model_size, device="cuda", compute_type="int8_float16")
+# model = WhisperModel(model_size, device="cuda", device_index=1, compute_type="float32")
+
+prompt = "播客內容"
+
+words = [
+    "伯樂",
+]
+hwords = ", ".join(words)
+
+import sys
+
+def transcribe_file(file_path, model, prompt, hwords):
+    if not os.path.exists(file_path):
+        print(f"File not found: {file_path}")
+        return
+
+    txt_filename = os.path.splitext(file_path)[0] + ".txt"
+    
+    # Check if the corresponding .txt file already exists
+    if os.path.exists(txt_filename):
+        print(f"Skipping {file_path} (corresponding .txt file already exists)\r\n")
+        print(f"Output file: {txt_filename}")
+        return
+
+    trans_start_time = time.time()
+
+    segments, info = model.transcribe(
+        file_path,
+        # language="zh",
+        # multilingual=True,
+        initial_prompt=prompt,
+        temperature=0.0,
+        vad_filter=True,
+        vad_parameters = dict(min_silence_duration_ms=500, min_speech_duration_ms=150, max_speech_duration_s=15),
+        repetition_penalty=1.1,
+        beam_size=10,
+        hotwords=hwords
+    )
+
+    print(f"File: {file_path}")
+    # print(info)
+
+    with open(txt_filename, "w", encoding="utf-8") as txt_file:
+        for segment in segments:
+            # print(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}")
+            txt_file.write(f"[{segment.start:.2f}s -> {segment.end:.2f}s] {segment.text}\n")
+
+    print()  # Print an empty line for better readability
+
+    trans_end_time = time.time()
+    trans_execution_time = trans_end_time - trans_start_time
+    print(f"Transcribe time: {trans_execution_time:.2f} seconds\r\n")
+    print(f"Output file: {txt_filename}")
+
+# Specify the directory containing the mp3 files
+directory = "."
+extensions = (".m4a", ".mp3")
+
+if len(sys.argv) > 1:
+    target_file = sys.argv[1]
+    transcribe_file(target_file, model, prompt, hwords)
+else:
+    # Loop through all files in the directory
+    for filename in os.listdir(directory):
+        # Check if the file has the mp3 extension
+        if filename.endswith(extensions):
+            file_path = os.path.join(directory, filename)
+            transcribe_file(file_path, model, prompt, hwords)
+
+end_time = time.time()
+execution_time = end_time - start_time
+print(f"Total execution time: {execution_time:.2f} seconds\r\n")
