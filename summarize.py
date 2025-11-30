@@ -60,6 +60,13 @@ def summarize_transcript(file_path):
         print("錯誤: 請先設定 API Key (在 summarize.py 中設定或是環境變數 GEMINI_API_KEY)")
         return
 
+    base_name = os.path.splitext(file_path)[0]
+    output_file = f"{base_name}_summary.md"
+
+    if os.path.exists(output_file):
+        print(f"摘要檔案已存在，跳過: {output_file}")
+        return
+
     print(f"正在讀取文字稿: {file_path} ...")
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -87,9 +94,6 @@ def summarize_transcript(file_path):
         summary = response.text
         
         # 儲存摘要
-        base_name = os.path.splitext(file_path)[0]
-        output_file = f"{base_name}_summary.md"
-        
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(summary)
             
