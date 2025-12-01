@@ -3,6 +3,7 @@ import sys
 import os
 import sys
 from google import genai
+from google.genai import types
 
 # --- Configuration ---
 # 請在此填入您的 API Key，或是設定環境變數 GEMINI_API_KEY
@@ -88,7 +89,10 @@ def summarize_transcript(file_path):
 
         response = client.models.generate_content(
             model='gemini-2.5-pro',
-            contents=full_prompt
+            contents=full_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.3
+            )
         )
         
         summary = response.text

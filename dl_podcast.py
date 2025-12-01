@@ -41,7 +41,7 @@ def sanitize_filename(filename):
     """
     return re.sub(r'[\\/*?:"<>|]', "", filename)
 
-def download_latest_episodes(feed_url, num_episodes=3, save_dir="downloads", keyword=None):
+def download_latest_episodes(feed_url, num_episodes=3, save_dir="downloads", keyword=None, target_weekday=None):
     """
     解析 RSS 並下載最新 N 集
     """
@@ -58,16 +58,24 @@ def download_latest_episodes(feed_url, num_episodes=3, save_dir="downloads", key
 
     # 取得最新 N 集 (feed.entries 通常是按時間排序的，最新的在最前面)
     all_episodes = feed.entries
-    
+    episodes_to_process = all_episodes
+
     if keyword:
         print(f"正在篩選包含關鍵字 '{keyword}' 的單集...")
-        filtered_episodes = [ep for ep in all_episodes if keyword in ep.title]
-        if not filtered_episodes:
+        episodes_to_process = [ep for ep in episodes_to_process if keyword in ep.title]
+        if not episodes_to_process:
             print(f"  [提示] 找不到包含關鍵字 '{keyword}' 的單集")
             return
-        episodes = filtered_episodes[:num_episodes]
-    else:
-        episodes = all_episodes[:num_episodes]
+
+    if target_weekday is not None:
+        print(f"正在篩選星期 {target_weekday} (0=週一) 的單集...")
+        # published_parsed is a time.struct_time, tm_wday is 0-6 (Monday is 0)
+        episodes_to_process = [ep for ep in episodes_to_process if ep.get('published_parsed') and ep.published_parsed.tm_wday == target_weekday]
+        if not episodes_to_process:
+            print(f"  [提示] 找不到符合星期 {target_weekday} 的單集")
+            return
+
+    episodes = episodes_to_process[:num_episodes]
 
     for i, ep in enumerate(episodes):
         title = ep.title
@@ -136,9 +144,25 @@ def download_latest_episodes(feed_url, num_episodes=3, save_dir="downloads", key
                     subprocess.run([sys.executable, fwhisper_script, filename], check=True)
                     print(f"     -> 轉錄完成")
                     
+                    txt_filename = os.path.splitext(filename)[0] + ".txt"
+
+                    # 呼叫 correct.py 進行校正
+                    correct_script = "correct.py"
+                    corrected_filename = os.path.splitext(filename)[0] + "_corrected.txt"
+                    
+                    if os.path.exists(correct_script) and os.path.exists(txt_filename):
+                        print(f"     -> 開始校正: {txt_filename}")
+                        try:
+                            subprocess.run([sys.executable, correct_script, txt_filename], check=True)
+                            print(f"     -> 校正完成")
+                            # 如果校正成功，使用校正後的檔案進行摘要
+                            if os.path.exists(corrected_filename):
+                                txt_filename = corrected_filename
+                        except subprocess.CalledProcessError as e:
+                            print(f"     -> 校正失敗: {e}")
+
                     # 呼叫 summarize.py 進行摘要
                     summarize_script = "summarize.py"
-                    txt_filename = os.path.splitext(filename)[0] + ".txt"
                     
                     if os.path.exists(summarize_script) and os.path.exists(txt_filename):
                         print(f"     -> 開始摘要: {txt_filename}")
@@ -163,26 +187,34 @@ if __name__ == "__main__":
         # "Y Combinator Startup Podcast",
         # "a16z Podcast",
         # "Lex Fridman Podcast",
-        # "罗永浩的十字路口",
-        # "NVIDIA AI Podcast",
-        # "脑放电波",
-        # "脑放电波",
-        ("科技咖", "【歷史x輕管理】")
+        # "Soft & Share 軟體開發資訊分享",
+        # ("馨天地", "陳鳳馨 ╳ 馮勃翰", 0), # 0 = Monday
+        ("馨天地", "經濟學人"),
+        # ("馨天地", "醒醒腦！科學")
     ]
 
     for item in target_podcasts:
+        keyword = None
+        target_weekday = None
+        
         if isinstance(item, tuple):
-            podcast_name, keyword = item
+            if len(item) == 2:
+                podcast_name, keyword = item
+            elif len(item) == 3:
+                podcast_name, keyword, target_weekday = item
         else:
             podcast_name = item
-            keyword = None
 
-        print(f"\n=== 處理節目: {podcast_name} (關鍵字: {keyword if keyword else '無'}) ===")
-        # 1. 取得 RSS URL
-        rss_url = get_itunes_feed_url(podcast_name)
+        print(f"\n=== 處理 Podcast: {podcast_name} (關鍵字: {keyword}, 星期: {target_weekday}) ===")
         
-        # 2. 下載最新 3 集
-        if rss_url:
-            # 為了避免檔案混在一起，我們用節目名稱建立子資料夾
-            folder_name = sanitize_filename(podcast_name)
-            download_latest_episodes(rss_url, num_episodes=10, save_dir=f"podcasts/{folder_name}", keyword=keyword)
+        # 搜尋 Podcast
+        feed_url = get_itunes_feed_url(podcast_name)
+        
+        if feed_url:
+            # 下載最新單集
+            # 建立專屬資料夾
+            # Use sanitize_filename for the directory name to avoid issues with special characters
+            save_dir = f"podcasts/{sanitize_filename(podcast_name)}"
+            download_latest_episodes(feed_url, num_episodes=1, save_dir=save_dir, keyword=keyword, target_weekday=target_weekday)
+        
+        print("\n" + "="*30 + "\n")
