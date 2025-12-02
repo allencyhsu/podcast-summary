@@ -2,18 +2,47 @@ import os
 import time
 start_time = time.time()
 
+import pynvml
+
+def get_optimal_device():
+    try:
+        pynvml.nvmlInit()
+        device_count = pynvml.nvmlDeviceGetCount()
+        best_device_index = 0
+        max_free_memory = 0
+
+        print(f"Found {device_count} GPUs.")
+
+        for i in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            free_memory_mb = mem_info.free / 1024 / 1024
+            print(f"GPU {i}: {free_memory_mb:.2f} MB free")
+
+            if free_memory_mb > max_free_memory:
+                max_free_memory = free_memory_mb
+                best_device_index = i
+        
+        pynvml.nvmlShutdown()
+        print(f"Selected GPU {best_device_index} with {max_free_memory:.2f} MB free memory.")
+        return best_device_index
+    except Exception as e:
+        print(f"Error detecting GPU memory: {e}. Defaulting to GPU 0.")
+        return 0
+
 from faster_whisper import WhisperModel
 
 model_size = "large-v2"
 # model_size = "deepdml/faster-whisper-large-v3-turbo-ct2"
-model = WhisperModel(model_size, device="cuda", device_index=1, compute_type="float16")
+device_index = get_optimal_device()
+model = WhisperModel(model_size, device="cuda", device_index=device_index, compute_type="float16")
 # model = WhisperModel(model_size, device="cuda", compute_type="int8_float16")
 # model = WhisperModel(model_size, device="cuda", device_index=1, compute_type="float32")
 
 prompt = "播客內容"
 
 words = [
-    "伯樂",
+    "伯樂"
 ]
 hwords = ", ".join(words)
 
