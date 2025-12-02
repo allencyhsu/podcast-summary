@@ -38,7 +38,7 @@
 請確保已安裝 Python 3.8+ 以及以下套件：
 
 ```bash
-pip install requests feedparser faster-whisper google-genai
+pip install requests feedparser faster-whisper google-genai pynvml
 ```
 
 此外，你需要一組 Google Gemini API Key。
