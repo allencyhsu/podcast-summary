@@ -1,56 +1,97 @@
 import os
 import sys
-import os
-import sys
+import re
 from google import genai
 from google.genai import types
 
 # --- Configuration ---
 # 請在此填入您的 API Key，或是設定環境變數 GEMINI_API_KEY
 API_KEY = os.getenv("GEMINI_API_KEY") or "your_api_key"
+PROMPT_TEMPLATE_PATH = "prompt_template.md"
 
-# 請在此填入您的提示詞 (Prompt)
-PROMPT = """
-# Role
-你是一位精通矽谷科技生態與前沿技術的資深分析師。你具備極強的邏輯歸納能力，擅長從雜亂的口語對話中提煉出高價值的技術報告。
+def parse_templates(file_path):
+    """
+    Parses the prompt_template.md file to extract template descriptions and contents.
+    """
+    if not os.path.exists(file_path):
+        print(f"Warning: Prompt template file not found at {file_path}")
+        return {}, {}
 
-# Task
-請分析提供的 Podcast 內容，撰寫一份深度技術報告。
+    with open(file_path, "r", encoding="utf-8") as f:
+        content = f.read()
 
-# Language & Tone
-- **語言**：繁體中文（台灣用語）。請注意術語轉換（例如：Software -> 軟體, Project -> 專案, Information -> 資訊, Optimization -> 最佳化, Interface -> 介面）。
-- **語氣**：專業、客觀、深度，避免行銷術語或過度修飾。
+    # 1. Extract Template Descriptions from the Table
+    # Looking for lines like: | **範本 01** | ... | ... |
+    table_pattern = re.compile(r"\|\s*\*\*範本\s*(\d+)\*\*\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|")
+    descriptions = {}
+    
+    for match in table_pattern.finditer(content):
+        template_id = match.group(1)
+        # Combine "Applicable Type" and "Core Objective" for the AI to understand
+        desc_type = match.group(2).replace("<br>", " ").strip()
+        desc_objective = match.group(3).strip()
+        descriptions[template_id] = f"{desc_type} - {desc_objective}"
 
-# Output Structure
-請依照以下 Markdown 格式輸出：
+    # 2. Extract Template Prompts
+    # Looking for sections like: #### 範本 01：... ```markdown ... ```
+    prompts = {}
+    # Split by "#### 範本" to separate sections
+    sections = re.split(r"#### 範本\s*(\d+)[：:]", content)
+    
+    # The first element is before the first template, so skip it.
+    # Then we have pairs of (id, content)
+    for i in range(1, len(sections), 2):
+        template_id = sections[i]
+        section_content = sections[i+1]
+        
+        # Extract the code block
+        code_block_match = re.search(r"```markdown\s*(.*?)\s*```", section_content, re.DOTALL)
+        if code_block_match:
+            prompts[template_id] = code_block_match.group(1)
 
-## 1. 核心論述 (The One Thing)
-用一段精煉的文字（約 100 字）闡述這集 Podcast 試圖傳達的最重要概念或技術突破。
+    return descriptions, prompts
 
-## 2. 關鍵技術與概念拆解 (Technical Deep Dive)
-針對對話中提到的 3-5 個核心技術或概念進行深度解析。
-- **概念名稱**：(中英對照)
-- **原理/定義**：講者是如何解釋這個概念的？
-- **應用場景**：這項技術解決了什麼具體問題？
-- **Gemini 補充**：(請利用你的知識庫，用一句話補充這個概念在目前市場上的其他競爭技術)
+def determine_best_template(client, content, descriptions):
+    """
+    Uses Gemini to analyze the content and select the best template.
+    """
+    # Construct the selection prompt
+    options_text = ""
+    for tid, desc in descriptions.items():
+        if tid == "00": continue # Skip the auto-detect template itself
+        options_text += f"- Template {tid}: {desc}\n"
 
-## 3. 非共識觀點 (Contrarian Views)
-找出講者提出的「反直覺」或「挑戰主流看法」的觀點。
-- **主流觀點**：大眾通常怎麼想？
-- **講者觀點**：講者為什麼反對？他的論據是什麼？
+    selection_prompt = f"""
+You are an expert content classifier. Your task is to analyze the provided podcast transcript excerpt and select the most appropriate summary template from the list below.
 
-## 4. 市場預測與時間軸 (Future Outlook)
-整理講者對於未來 1 年、5 年、10 年的預測。請區分「確定性高」的趨勢與「賭注性質」的預測。
+# Available Templates
+{options_text}
 
-## 5. 精彩問答摘要 (Q&A Highlights)
-挑選 3 個最犀利的問題與回答，以「Q: ... / A: ...」的方式呈現精華。
+# Input Transcript (Excerpt)
+{content[:5000]} ... (truncated)
 
-## 6. 延伸思考題 (Reflection)
-基於內容，提出 2 個值得讀者深入思考的開放性問題。
-
-# Input Data
+# Instructions
+1. Analyze the topic, tone, and structure of the transcript.
+2. Select the ONE template that best fits the content.
+3. Return ONLY the template number (e.g., "01", "07"). Do not output any other text.
 """
-# ---------------------
+    try:
+        response = client.models.generate_content(
+            model='gemini-2.5-pro',
+            contents=selection_prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.1 # Low temperature for deterministic selection
+            )
+        )
+        selected_id = response.text.strip()
+        # Handle potential extra text like "Template 01"
+        match = re.search(r"(\d+)", selected_id)
+        if match:
+            return match.group(1)
+        return "01" # Default fallback
+    except Exception as e:
+        print(f"Error selecting template: {e}")
+        return "01" # Default fallback
 
 def summarize_transcript(file_path):
     if not os.path.exists(file_path):
@@ -68,6 +109,14 @@ def summarize_transcript(file_path):
         print(f"摘要檔案已存在，跳過: {output_file}")
         return
 
+    # Load Templates
+    print(f"正在讀取 Prompt 範本: {PROMPT_TEMPLATE_PATH} ...")
+    descriptions, prompts = parse_templates(PROMPT_TEMPLATE_PATH)
+    
+    if not prompts:
+        print("錯誤: 無法讀取任何 Prompt 範本，請檢查 prompt_template.md")
+        return
+
     print(f"正在讀取文字稿: {file_path} ...")
     try:
         with open(file_path, "r", encoding="utf-8") as f:
@@ -80,13 +129,20 @@ def summarize_transcript(file_path):
     try:
         client = genai.Client(api_key=API_KEY)
         
-        # 組合 Prompt 與內容
-        full_prompt = PROMPT + "\n" + content
+        # Smart Routing / Dynamic Selection
+        print("正在分析內容以選擇最佳範本...")
+        selected_template_id = determine_best_template(client, content, descriptions)
         
-        # 避免 token 數過多，這裡可以做簡單的長度檢查或截斷 (視情況而定)
-        # 簡單截斷範例 (Gemini 1.5 Flash context window 很大，通常不需要太擔心，但以防萬一)
-        # full_prompt = full_prompt[:1000000] 
+        if selected_template_id not in prompts:
+            print(f"警告: 選擇的範本 {selected_template_id} 不存在，使用預設範本 01")
+            selected_template_id = "01"
+            
+        selected_prompt = prompts[selected_template_id]
+        print(f"已選擇範本: {selected_template_id} ({descriptions.get(selected_template_id, 'Unknown')})")
 
+        # 組合 Prompt 與內容
+        full_prompt = selected_prompt + "\n\n# Input Data\n" + content
+        
         response = client.models.generate_content(
             model='gemini-2.5-pro',
             contents=full_prompt,
