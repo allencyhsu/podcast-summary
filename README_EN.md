@@ -23,15 +23,22 @@ This is an automated tool for downloading, transcribing, correcting, and summari
     *   Preserves original timestamps.
 
 4.  **Smart Summarization (`summarize.py`)**:
-    *   Uses Google Gemini API to generate deep technical report-style summaries.
-    *   Includes structured content such as Core Thesis, Key Technical Concepts, Contrarian Views, and Future Outlook.
+    *   **Dynamic Prompt Selection**: Built-in "Smart Routing" analyzes podcast content (e.g., Tech Trends, Business Strategy, Science) and selects the best analysis framework from `prompt_template.md`.
+    *   **Diverse Templates**: Supports 8+ professional analysis templates, including:
+        *   General Analysis
+        *   VC Perspective
+        *   Mental Models
+        *   Academic Research
+        *   Historical Strategy
+        *   Science & Health
+    *   **Traditional Chinese Output**: Enforces high-quality Traditional Chinese (Taiwan) output.
 
 ## Requirements
 
 Ensure you have Python 3.8+ and the following packages installed:
 
 ```bash
-pip install requests feedparser faster-whisper google-genai
+pip install requests feedparser faster-whisper google-genai nvidia-ml-py
 ```
 
 Additionally, you need a Google Gemini API Key.
@@ -73,13 +80,15 @@ Download -> Transcribe (`fwhisper.py`) -> Correct (`correct.py`) -> Summarize (`
 *   **Transcribe**: `python fwhisper.py <audio_file>`
 *   **Correct**: `python correct.py <transcript_file>`
 *   **Summarize**: `python summarize.py <transcript_file>`
+    *   `summarize.py` automatically reads `prompt_template.md` in the same directory for smart routing.
 
 ## File Structure
 
 *   `dl_podcast.py`: Main program, handles downloading and the processing pipeline.
 *   `fwhisper.py`: Speech transcription module.
 *   `correct.py`: Typo correction module.
-*   `summarize.py`: Summary generation module.
+*   `summarize.py`: Summary generation module (includes Dynamic Prompt Selection).
+*   `prompt_template.md`: Library of prompt templates for various analysis styles.
 
 ## License
 
