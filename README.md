@@ -23,8 +23,15 @@
     *   保留原始時間軸。
 
 4.  **智慧摘要 (`summarize.py`)**:
-    *   使用 Google Gemini API 生成深度技術報告風格的摘要。
-    *   包含核心論述、關鍵技術拆解、非共識觀點、市場預測等結構化內容。
+    *   **動態 Prompt 選擇**: 內建「智慧路由」功能，自動分析 Podcast 內容類型（如科技趨勢、商業戰略、心理科普等），並從 `prompt_template.md` 中選擇最適合的分析框架。
+    *   **多樣化範本**: 支援 8 種以上的專業分析範本，包括：
+        *   全域分析 (General Analysis)
+        *   創投獵手 (VC Perspective)
+        *   大師思維 (Mental Models)
+        *   學術研讀 (Academic Research)
+        *   科技史觀 (Historical Strategy)
+        *   科普新知 (Science & Health) 等。
+    *   **繁體中文輸出**: 強制輸出高品質的台灣繁體中文摘要。
 
 ## 安裝需求 (Requirements)
 
@@ -73,13 +80,15 @@ python dl_podcast.py
 *   **轉錄**: `python fwhisper.py <audio_file>`
 *   **校正**: `python correct.py <transcript_file>`
 *   **摘要**: `python summarize.py <transcript_file>`
+    *   `summarize.py` 會自動讀取同目錄下的 `prompt_template.md` 進行智慧路由。
 
 ## 檔案結構
 
 *   `dl_podcast.py`: 主程式，負責下載與串接流程。
 *   `fwhisper.py`: 語音轉錄模組。
 *   `correct.py`: 錯字校正模組。
-*   `summarize.py`: 摘要生成模組。
+*   `summarize.py`: 摘要生成模組 (含動態 Prompt 選擇)。
+*   `prompt_template.md`: 存放各種分析風格的 Prompt 範本庫。
 
 ## License
 
